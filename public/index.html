@@ -110,6 +110,7 @@ async function checkLogin(){
   if(data.loggedIn){
     userEmail = data.email;
     renderApp();
+    initNotificationButton();
     loadEmails();
   } else {
     renderLogin();
@@ -137,7 +138,10 @@ function renderApp(){
             <h1>Inbox Manifest</h1>
             <p class="email">${userEmail}</p>
           </div>
-          <button class="logout-btn" onclick="logout()">Sign out</button>
+          <div style="display:flex; gap:8px;">
+            <button class="logout-btn" id="notifyBtn" onclick="toggleNotifications()">🔔 Off</button>
+            <button class="logout-btn" onclick="logout()">Sign out</button>
+          </div>
         </div>
       </div>
       <div class="chiprow" id="chiprow"></div>
@@ -267,6 +271,57 @@ function copyReply(){
   setTimeout(()=>toast.classList.remove("show"), 1400);
 }
 window.copyReply = copyReply;
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+async function toggleNotifications() {
+  const btn = document.getElementById("notifyBtn");
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    alert("This browser doesn't support push notifications.");
+    return;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const existing = await reg.pushManager.getSubscription();
+
+  if (existing) {
+    await existing.unsubscribe();
+    await fetch("/api/push/unsubscribe", { method: "POST" });
+    btn.textContent = "🔔 Off";
+    return;
+  }
+
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") {
+    alert("Notifications weren't allowed. You can turn them on later from this same button.");
+    return;
+  }
+  const keyRes = await fetch("/api/push/vapid-public-key");
+  const { key } = await keyRes.json();
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(key)
+  });
+  await fetch("/api/push/subscribe", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub })
+  });
+  btn.textContent = "🔔 On";
+}
+window.toggleNotifications = toggleNotifications;
+
+async function initNotificationButton() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    const existing = await reg.pushManager.getSubscription();
+    const btn = document.getElementById("notifyBtn");
+    if (btn) btn.textContent = existing ? "🔔 On" : "🔔 Off";
+  } catch (e) { console.error("Service worker registration failed:", e); }
+}
 
 checkLogin();
 </script>
