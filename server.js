@@ -1,6 +1,6 @@
 require("dotenv").config();
 const express = require("express");
-const session = require("express-session");
+const cookieSession = require("cookie-session");
 const fs = require("fs");
 const path = require("path");
 const { google } = require("googleapis");
@@ -25,15 +25,13 @@ const DB_FILE = path.join(__dirname, "data.json");
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "dev-secret-change-me",
-    resave: false,
-    saveUninitialized: false,
-    cookie: { maxAge: 1000 * 60 * 60 * 24 * 30 } // 30 days
+  cookieSession({
+    name: "session",
+    keys: [process.env.SESSION_SECRET || "dev-secret-change-me"],
+    maxAge: 1000 * 60 * 60 * 24 * 30
   })
 );
 
-// ---------- tiny file-based store for "marked replied / marked fake" ----------
 function loadDb() {
   try {
     return JSON.parse(fs.readFileSync(DB_FILE, "utf8"));
@@ -45,7 +43,6 @@ function saveDb(db) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
 }
 
-// ---------- Google OAuth ----------
 function oauthClient() {
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -95,7 +92,8 @@ app.get("/auth/google/callback", async (req, res) => {
 });
 
 app.post("/auth/logout", (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }));
+  req.session = null;
+  res.json({ ok: true });
 });
 
 app.get("/api/me", (req, res) => {
@@ -103,7 +101,6 @@ app.get("/api/me", (req, res) => {
   res.json({ loggedIn: true, email: req.session.email });
 });
 
-// ---------- middleware: require login ----------
 function requireAuth(req, res, next) {
   if (!req.session.tokens) return res.status(401).json({ error: "not_logged_in" });
   next();
@@ -115,7 +112,6 @@ function gmailClient(req) {
   return google.gmail({ version: "v1", auth: client });
 }
 
-// ---------- categorization (simple keyword rules — swap in an AI call here later) ----------
 function categorize(text) {
   const t = text.toLowerCase();
   const has = (...words) => words.some(w => t.includes(w));
@@ -146,12 +142,9 @@ function suggestReply(subject, body) {
   );
 }
 
-// ---------- main inbox endpoint ----------
 app.get("/api/emails", requireAuth, async (req, res) => {
   try {
     const gmail = gmailClient(req);
-    const db = loadDb();
-    const userDb = db[req.session.email] || {};
 
     const list = await gmail.users.threads.list({
       userId: "me",
@@ -185,8 +178,7 @@ app.get("/api/emails", requireAuth, async (req, res) => {
         date: headers.Date,
         snippet: msg.snippet,
         status: isUnread ? "unopened" : "opened_no_reply",
-        category: categorize((headers.Subject || "") + " " + (msg.snippet || "")),
-        state: userDb[t.id] || null
+        category: categorize((headers.Subject || "") + " " + (msg.snippet || ""))
       });
     }
 
@@ -235,19 +227,6 @@ app.get("/api/emails/:id", requireAuth, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: "fetch_failed", message: err.message });
   }
-});
-
-app.post("/api/emails/:id/state", requireAuth, (req, res) => {
-  const { state } = req.body;
-  const db = loadDb();
-  db[req.session.email] = db[req.session.email] || {};
-  if (state) {
-    db[req.session.email][req.params.id] = state;
-  } else {
-    delete db[req.session.email][req.params.id];
-  }
-  saveDb(db);
-  res.json({ ok: true });
 });
 
 app.get("/api/push/vapid-public-key", (req, res) => {
