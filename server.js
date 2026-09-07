@@ -257,6 +257,24 @@ app.post("/api/push/unsubscribe", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+app.post("/api/push/test", requireAuth, async (req, res) => {
+  const db = loadDb();
+  const user = db[req.session.email];
+  if (!user || !user.pushSubscription) {
+    return res.status(400).json({ error: "not_subscribed" });
+  }
+  try {
+    await webpush.sendNotification(
+      user.pushSubscription,
+      JSON.stringify({ title: "Inbox Manifest", body: "Test notification — this is working!" })
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Test notification failed:", err.message);
+    res.status(500).json({ error: "send_failed", message: err.message });
+  }
+});
+
 async function checkAllUsersAndNotify() {
   const db = loadDb();
   for (const email of Object.keys(db)) {
