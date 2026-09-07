@@ -97,6 +97,7 @@ app.post("/auth/logout", (req, res) => {
 });
 
 app.get("/api/me", (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   if (!req.session.tokens) return res.json({ loggedIn: false });
   res.json({ loggedIn: true, email: req.session.email });
 });
@@ -143,6 +144,7 @@ function suggestReply(subject, body) {
 }
 
 app.get("/api/emails", requireAuth, async (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   try {
     const gmail = gmailClient(req);
 
@@ -153,6 +155,8 @@ app.get("/api/emails", requireAuth, async (req, res) => {
     });
 
     const threads = list.data.threads || [];
+    console.log(`[DEBUG] Gmail query returned ${threads.length} threads for ${req.session.email}`);
+
     const results = [];
 
     for (const t of threads) {
@@ -168,8 +172,11 @@ app.get("/api/emails", requireAuth, async (req, res) => {
       const isUnread = (msg.labelIds || []).includes("UNREAD");
       const hasSentReply = full.data.messages.length > 1 &&
         full.data.messages.some(m => (m.labelIds || []).includes("SENT"));
+      const willSkip = hasSentReply && full.data.messages.length <= 2;
 
-      if (hasSentReply && full.data.messages.length <= 2) continue;
+      console.log(`[DEBUG] Thread ${t.id} | Subject: "${headers.Subject}" | Date: ${headers.Date} | messages:${full.data.messages.length} | willSkip:${willSkip}`);
+
+      if (willSkip) continue;
 
       results.push({
         id: t.id,
@@ -182,9 +189,10 @@ app.get("/api/emails", requireAuth, async (req, res) => {
       });
     }
 
+    console.log(`[DEBUG] Returning ${results.length} emails to the app`);
     res.json({ emails: results });
   } catch (err) {
-    console.error(err);
+    console.error("[DEBUG] /api/emails failed:", err.message, err.stack);
     res.status(500).json({ error: "fetch_failed", message: err.message });
   }
 });
