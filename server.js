@@ -4,6 +4,19 @@ const session = require("express-session");
 const fs = require("fs");
 const path = require("path");
 const { google } = require("googleapis");
+const webpush = require("web-push");
+
+let VAPID_KEYS;
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  VAPID_KEYS = { publicKey: process.env.VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY };
+} else {
+  VAPID_KEYS = webpush.generateVAPIDKeys();
+  console.log("No VAPID keys set in environment. Generated temporary ones for this run:");
+  console.log("VAPID_PUBLIC_KEY=" + VAPID_KEYS.publicKey);
+  console.log("VAPID_PRIVATE_KEY=" + VAPID_KEYS.privateKey);
+  console.log("Add these to your environment variables so they stay stable across restarts.");
+}
+webpush.setVapidDetails("mailto:admin@globaloils.us", VAPID_KEYS.publicKey, VAPID_KEYS.privateKey);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -68,6 +81,12 @@ app.get("/auth/google/callback", async (req, res) => {
 
     req.session.tokens = tokens;
     req.session.email = me.data.email;
+
+    const db = loadDb();
+    db[me.data.email] = db[me.data.email] || {};
+    db[me.data.email].tokens = tokens;
+    saveDb(db);
+
     res.redirect("/");
   } catch (err) {
     console.error("OAuth callback failed:", err.message);
@@ -157,7 +176,7 @@ app.get("/api/emails", requireAuth, async (req, res) => {
       const hasSentReply = full.data.messages.length > 1 &&
         full.data.messages.some(m => (m.labelIds || []).includes("SENT"));
 
-      if (hasSentReply && full.data.messages.length <= 2) continue; // simple heuristic: already replied once, skip for MVP
+      if (hasSentReply && full.data.messages.length <= 2) continue;
 
       results.push({
         id: t.id,
@@ -167,7 +186,7 @@ app.get("/api/emails", requireAuth, async (req, res) => {
         snippet: msg.snippet,
         status: isUnread ? "unopened" : "opened_no_reply",
         category: categorize((headers.Subject || "") + " " + (msg.snippet || "")),
-        state: userDb[t.id] || null // "done" | "fake" | null
+        state: userDb[t.id] || null
       });
     }
 
@@ -219,7 +238,7 @@ app.get("/api/emails/:id", requireAuth, async (req, res) => {
 });
 
 app.post("/api/emails/:id/state", requireAuth, (req, res) => {
-  const { state } = req.body; // "done" | "fake" | null
+  const { state } = req.body;
   const db = loadDb();
   db[req.session.email] = db[req.session.email] || {};
   if (state) {
@@ -229,6 +248,85 @@ app.post("/api/emails/:id/state", requireAuth, (req, res) => {
   }
   saveDb(db);
   res.json({ ok: true });
+});
+
+app.get("/api/push/vapid-public-key", (req, res) => {
+  res.json({ key: VAPID_KEYS.publicKey });
+});
+
+app.post("/api/push/subscribe", requireAuth, (req, res) => {
+  const db = loadDb();
+  db[req.session.email] = db[req.session.email] || {};
+  db[req.session.email].pushSubscription = req.body.subscription;
+  db[req.session.email].lastNotifiedOverdueCount = 0;
+  saveDb(db);
+  res.json({ ok: true });
+});
+
+app.post("/api/push/unsubscribe", requireAuth, (req, res) => {
+  const db = loadDb();
+  if (db[req.session.email]) delete db[req.session.email].pushSubscription;
+  saveDb(db);
+  res.json({ ok: true });
+});
+
+async function checkAllUsersAndNotify() {
+  const db = loadDb();
+  for (const email of Object.keys(db)) {
+    const user = db[email];
+    if (!user.tokens || !user.pushSubscription) continue;
+
+    try {
+      const client = oauthClient();
+      client.setCredentials(user.tokens);
+      const gmail = google.gmail({ version: "v1", auth: client });
+
+      const list = await gmail.users.threads.list({
+        userId: "me",
+        q: "in:inbox newer_than:21d",
+        maxResults: 40
+      });
+      const threads = list.data.threads || [];
+      let overdueCount = 0;
+      const sevenDaysMs = 1000 * 60 * 60 * 24 * 3;
+
+      for (const t of threads) {
+        if (user[t.id] === "done" || user[t.id] === "fake") continue;
+        const full = await gmail.users.threads.get({
+          userId: "me", id: t.id, format: "metadata", metadataHeaders: ["Date"]
+        });
+        if (full.data.messages.length > 2) continue;
+        const dateHeader = (full.data.messages[0].payload.headers || []).find(h => h.name === "Date");
+        if (!dateHeader) continue;
+        const age = Date.now() - new Date(dateHeader.value).getTime();
+        if (age > sevenDaysMs) overdueCount++;
+      }
+
+      if (overdueCount > 0 && overdueCount !== user.lastNotifiedOverdueCount) {
+        await webpush.sendNotification(
+          user.pushSubscription,
+          JSON.stringify({
+            title: "Inbox Manifest",
+            body: `${overdueCount} ${overdueCount === 1 ? "reply is" : "replies are"} overdue`
+          })
+        );
+        user.lastNotifiedOverdueCount = overdueCount;
+        saveDb(db);
+      } else if (overdueCount === 0) {
+        user.lastNotifiedOverdueCount = 0;
+        saveDb(db);
+      }
+    } catch (err) {
+      console.error(`Background check failed for ${email}:`, err.message);
+    }
+  }
+}
+
+setInterval(checkAllUsersAndNotify, 30 * 60 * 1000);
+
+app.get("/api/cron/keepalive", async (req, res) => {
+  checkAllUsersAndNotify().catch(err => console.error(err));
+  res.json({ ok: true, time: new Date().toISOString() });
 });
 
 app.listen(PORT, () => {
