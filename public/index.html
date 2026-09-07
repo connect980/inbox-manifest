@@ -91,6 +91,16 @@
 const CATEGORIES = {
   queries:{label:"Queries"}, logistics:{label:"Logistics"}, payment:{label:"Payment"}, other:{label:"Other updates"}
 };
+function getLocalStates(){
+  try { return JSON.parse(localStorage.getItem("inbox-manifest-states") || "{}"); }
+  catch(e){ return {}; }
+}
+function setLocalState(id, state){
+  const states = getLocalStates();
+  if(state) states[id] = state; else delete states[id];
+  localStorage.setItem("inbox-manifest-states", JSON.stringify(states));
+}
+
 let emails = [];
 let activeCategory = "all";
 let userEmail = null;
@@ -169,7 +179,8 @@ async function loadEmails(){
     const res = await fetch("/api/emails");
     if(res.status === 401){ renderLogin(); return; }
     const data = await res.json();
-    emails = data.emails || [];
+    const localStates = getLocalStates();
+    emails = (data.emails || []).map(e => ({ ...e, state: localStates[e.id] || null }));
     renderChips();
     renderList();
   }catch(e){
@@ -252,10 +263,8 @@ window.addEventListener("popstate", () => {
   if(document.getElementById("detailPanel").classList.contains("open")) closeDetail(true);
 });
 
-async function setState(id, state){
-  await fetch("/api/emails/" + id + "/state", {
-    method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({state})
-  });
+function setState(id, state){
+  setLocalState(id, state);
   const e = emails.find(x => x.id === id);
   if(e) e.state = state;
   closeDetail();
