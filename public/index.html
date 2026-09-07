@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#141A22">
+<title>Inbox Manifest</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.44.0/iconfont/tabler-icons.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5F6F8; --surface:#FFFFFF; --line:#E6E8EC; --ink:#141A22; --ink-soft:#6B7280; --ink-faint:#9CA3AF;
+    --accent:#2F6FED; --accent-bg:#E8EFFD; --danger:#D64545; --danger-bg:#FCEAEA;
+    --warn:#C4791A; --warn-bg:#FBF0DE; --ok:#2E8B57; --ok-bg:#E5F3EB; --purple:#7C5CD6; --purple-bg:#EFEAFB;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+  .app{max-width:480px;margin:0 auto;min-height:100vh;padding-bottom:20px;}
+
+  .login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;text-align:center;}
+  .login-screen i{font-size:40px;color:var(--accent);margin-bottom:16px;}
+  .login-screen h1{font-size:22px;margin:0 0 8px;}
+  .login-screen p{font-size:14px;color:var(--ink-soft);margin:0 0 24px;max-width:32ch;}
+  .login-btn{
+    display:flex;align-items:center;gap:10px;background:var(--ink);color:#fff;border:none;
+    padding:13px 22px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;
+  }
+
+  .topbar{padding:18px 18px 10px;}
+  .topbar-row{display:flex;justify-content:space-between;align-items:center;}
+  .topbar h1{font-size:20px;font-weight:700;margin:0;}
+  .topbar .email{font-size:12px;color:var(--ink-soft);margin:2px 0 0;}
+  .logout-btn{background:none;border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12px;color:var(--ink-soft);cursor:pointer;}
+
+  .chiprow{display:flex;gap:8px;overflow-x:auto;padding:12px 18px 6px;-ms-overflow-style:none;scrollbar-width:none;}
+  .chiprow::-webkit-scrollbar{display:none;}
+  .chip{flex-shrink:0;display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);
+    padding:7px 13px;border-radius:20px;font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;white-space:nowrap;}
+  .chip.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+  .list{padding:6px 12px 0;}
+  .row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px;margin-bottom:8px;cursor:pointer;}
+  .row.done{opacity:0.5;}
+  .avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:14px;color:#fff;background:var(--ink-faint);}
+  .row-body{flex:1;min-width:0;}
+  .row-top{display:flex;justify-content:space-between;gap:8px;}
+  .row-who{font-size:14.5px;font-weight:600;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .row-sub{font-size:12.5px;color:var(--ink-soft);margin:2px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .row-tags{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+  .tag{font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:20px;}
+  .tag.cat-queries{background:var(--accent-bg);color:var(--accent);}
+  .tag.cat-logistics{background:var(--purple-bg);color:var(--purple);}
+  .tag.cat-payment{background:var(--warn-bg);color:var(--warn);}
+  .tag.cat-other{background:var(--bg);color:var(--ink-soft);}
+  .chev{color:var(--ink-faint);font-size:18px;flex-shrink:0;}
+  .empty,.loading{text-align:center;padding:60px 30px;color:var(--ink-soft);font-size:14px;}
+
+  .detail{position:fixed;inset:0;background:var(--bg);z-index:20;max-width:480px;margin:0 auto;
+    display:flex;flex-direction:column;transform:translateX(100%);transition:transform 300ms cubic-bezier(.32,.72,0,1);pointer-events:none;}
+  .detail.open{transform:translateX(0);pointer-events:auto;}
+  .detail-header{display:flex;align-items:center;gap:12px;padding:16px;background:var(--surface);border-bottom:1px solid var(--line);flex-shrink:0;}
+  .back-btn{width:34px;height:34px;border-radius:50%;border:none;background:var(--bg);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink);flex-shrink:0;}
+  .detail-header .who{font-size:15px;font-weight:700;margin:0;}
+  .detail-header .company{font-size:12px;color:var(--ink-soft);margin:1px 0 0;}
+  .detail-scroll{flex:1;overflow-y:auto;padding:16px;}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px;}
+  .card h4{font-size:11px;text-transform:uppercase;color:var(--ink-faint);margin:0 0 8px;font-weight:700;}
+  .card .text{font-size:13.5px;line-height:1.55;white-space:pre-wrap;color:var(--ink-soft);margin:0;}
+  .reply-box{width:100%;font-family:'Inter',sans-serif;font-size:13.5px;line-height:1.5;padding:12px;border-radius:10px;
+    border:1px solid var(--line);background:var(--bg);color:var(--ink);resize:vertical;min-height:170px;}
+  .detail-actions{display:flex;gap:8px;padding:12px 16px;background:var(--surface);border-top:1px solid var(--line);flex-wrap:wrap;}
+  .btn{flex:1;min-width:100px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:600;
+    padding:11px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer;}
+  .btn.primary{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .btn.danger{background:var(--danger-bg);color:var(--danger);border-color:var(--danger-bg);}
+  .btn.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-bg);}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
+    padding:10px 18px;border-radius:20px;font-size:13px;opacity:0;pointer-events:none;transition:opacity 0.2s;z-index:30;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+<div class="toast" id="toast">Reply copied</div>
+
+<script>
+const CATEGORIES = {
+  queries:{label:"Queries"}, logistics:{label:"Logistics"}, payment:{label:"Payment"}, other:{label:"Other updates"}
+};
+let emails = [];
+let activeCategory = "all";
+let userEmail = null;
+
+function initials(name){
+  const clean = name.replace(/<.*>/, "").trim();
+  return clean.split(" ").filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase() || "?";
+}
+function daysAgo(dateStr){
+  const d = new Date(dateStr);
+  return Math.max(0, Math.round((Date.now() - d.getTime()) / 86400000));
+}
+
+async function checkLogin(){
+  const res = await fetch("/api/me");
+  const data = await res.json();
+  if(data.loggedIn){
+    userEmail = data.email;
+    renderApp();
+    loadEmails();
+  } else {
+    renderLogin();
+  }
+}
+
+function renderLogin(){
+  document.getElementById("root").innerHTML = `
+    <div class="login-screen">
+      <i class="ti ti-mail-forward" aria-hidden="true"></i>
+      <h1>Inbox Manifest</h1>
+      <p>Connect your Gmail to see which business inquiries still need a reply.</p>
+      <button class="login-btn" onclick="window.location.href='/auth/google'">
+        <i class="ti ti-brand-google"></i> Sign in with Google
+      </button>
+    </div>`;
+}
+
+function renderApp(){
+  document.getElementById("root").innerHTML = `
+    <div class="app">
+      <div class="topbar">
+        <div class="topbar-row">
+          <div>
+            <h1>Inbox Manifest</h1>
+            <p class="email">${userEmail}</p>
+          </div>
+          <button class="logout-btn" onclick="logout()">Sign out</button>
+        </div>
+      </div>
+      <div class="chiprow" id="chiprow"></div>
+      <div class="list" id="list"></div>
+    </div>
+    <div class="detail" id="detailPanel">
+      <div class="detail-header">
+        <button class="back-btn" onclick="closeDetail()" aria-label="Back"><i class="ti ti-arrow-left"></i></button>
+        <div><p class="who" id="dWho"></p><p class="company" id="dSubject"></p></div>
+      </div>
+      <div class="detail-scroll" id="dScroll"></div>
+      <div class="detail-actions" id="dActions"></div>
+    </div>`;
+}
+
+async function logout(){
+  await fetch("/auth/logout", { method: "POST" });
+  window.location.reload();
+}
+window.logout = logout;
+
+async function loadEmails(){
+  document.getElementById("list").innerHTML = '<div class="loading">Loading your inbox…</div>';
+  try{
+    const res = await fetch("/api/emails");
+    if(res.status === 401){ renderLogin(); return; }
+    const data = await res.json();
+    emails = data.emails || [];
+    renderChips();
+    renderList();
+  }catch(e){
+    document.getElementById("list").innerHTML = '<div class="empty">Could not load your inbox. Try refreshing the page.</div>';
+  }
+}
+
+function renderChips(){
+  const counts = {all:0, queries:0, logistics:0, payment:0, other:0};
+  emails.forEach(e => { if(e.state) return; counts.all++; counts[e.category]++; });
+  let html = `<div class="chip ${activeCategory==='all'?'active':''}" onclick="setCategory('all')">All (${counts.all})</div>`;
+  Object.keys(CATEGORIES).forEach(k=>{
+    html += `<div class="chip ${activeCategory===k?'active':''}" onclick="setCategory('${k}')">${CATEGORIES[k].label} (${counts[k]})</div>`;
+  });
+  document.getElementById("chiprow").innerHTML = html;
+}
+function setCategory(c){ activeCategory = c; renderChips(); renderList(); }
+window.setCategory = setCategory;
+
+function renderList(){
+  const list = document.getElementById("list");
+  const visible = emails.filter(e => !e.state && (activeCategory==="all" || e.category===activeCategory))
+    .sort((a,b) => new Date(a.date) - new Date(b.date));
+  if(visible.length === 0){
+    list.innerHTML = '<div class="empty">Nothing waiting in this category.</div>';
+    return;
+  }
+  list.innerHTML = visible.map(e => `
+    <div class="row" onclick="openDetail('${e.id}')">
+      <div class="avatar">${initials(e.from)}</div>
+      <div class="row-body">
+        <div class="row-top">
+          <p class="row-who">${e.from.replace(/<.*>/,"").trim()}</p>
+          <span style="font-size:11.5px;color:var(--ink-faint);">${daysAgo(e.date)}d</span>
+        </div>
+        <p class="row-sub">${e.subject}</p>
+        <div class="row-tags"><span class="tag cat-${e.category}">${CATEGORIES[e.category].label}</span></div>
+      </div>
+      <i class="ti ti-chevron-right chev" aria-hidden="true"></i>
+    </div>`).join("");
+}
+
+async function openDetail(id){
+  const panel = document.getElementById("detailPanel");
+  document.getElementById("dWho").textContent = "Loading…";
+  document.getElementById("dSubject").textContent = "";
+  document.getElementById("dScroll").innerHTML = "";
+  document.getElementById("dActions").innerHTML = "";
+  panel.classList.add("open");
+  history.pushState({detail:true}, "");
+
+  const res = await fetch("/api/emails/" + id);
+  const e = await res.json();
+  document.getElementById("dWho").textContent = e.from;
+  document.getElementById("dSubject").textContent = e.subject;
+  document.getElementById("dScroll").innerHTML = `
+    <div class="card"><h4>Original message</h4><p class="text">${e.body.slice(0, 2000)}</p></div>
+    <div class="card"><h4>Suggested reply</h4><textarea class="reply-box" id="replyBox">${e.suggestedReply}</textarea></div>`;
+
+  const current = emails.find(x => x.id === id);
+  const isDone = current && current.state;
+  let actions = `<button class="btn primary" onclick="copyReply()"><i class="ti ti-copy"></i>Copy reply</button>`;
+  if(isDone){
+    actions += `<button class="btn" onclick="setState('${id}', null)"><i class="ti ti-arrow-back-up"></i>Undo</button>`;
+  } else {
+    actions += `<button class="btn ok" onclick="setState('${id}', 'done')"><i class="ti ti-check"></i>Mark replied</button>`;
+    actions += `<button class="btn danger" onclick="setState('${id}', 'fake')"><i class="ti ti-flag"></i>Mark fake</button>`;
+  }
+  document.getElementById("dActions").innerHTML = actions;
+}
+window.openDetail = openDetail;
+
+function closeDetail(fromPop){
+  document.getElementById("detailPanel").classList.remove("open");
+  renderList();
+  if(!fromPop) history.back();
+}
+window.closeDetail = closeDetail;
+window.addEventListener("popstate", () => {
+  if(document.getElementById("detailPanel").classList.contains("open")) closeDetail(true);
+});
+
+async function setState(id, state){
+  await fetch("/api/emails/" + id + "/state", {
+    method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({state})
+  });
+  const e = emails.find(x => x.id === id);
+  if(e) e.state = state;
+  closeDetail();
+}
+window.setState = setState;
+
+function copyReply(){
+  const ta = document.getElementById("replyBox");
+  ta.select();
+  navigator.clipboard.writeText(ta.value).catch(()=>document.execCommand("copy"));
+  const toast = document.getElementById("toast");
+  toast.classList.add("show");
+  setTimeout(()=>toast.classList.remove("show"), 1400);
+}
+window.copyReply = copyReply;
+
+checkLogin();
+</script>
+</body>
+</html>

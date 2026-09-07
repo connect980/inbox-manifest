@@ -1,0 +1,15 @@
+{
+  "name": "inbox-manifest",
+  "version": "1.0.0",
+  "description": "A Gmail-connected inbox triage app: categorizes inquiries and drafts replies.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "googleapis": "^140.0.1",
+    "dotenv": "^16.4.5"
+  }
+}
