@@ -115,7 +115,7 @@ function daysAgo(dateStr){
 }
 
 async function checkLogin(){
-  const res = await fetch("/api/me");
+  const res = await fetch("/api/me", { cache: "no-store" });
   const data = await res.json();
   if(data.loggedIn){
     userEmail = data.email;
@@ -149,7 +149,9 @@ function renderApp(){
             <p class="email">${userEmail}</p>
           </div>
           <div style="display:flex; gap:8px;">
+            <button class="logout-btn" onclick="loadEmails()"><i class="ti ti-refresh"></i></button>
             <button class="logout-btn" id="notifyBtn" onclick="toggleNotifications()">🔔 Off</button>
+            <button class="logout-btn" onclick="sendTestNotification()">Test</button>
             <button class="logout-btn" onclick="logout()">Sign out</button>
           </div>
         </div>
@@ -176,7 +178,7 @@ window.logout = logout;
 async function loadEmails(){
   document.getElementById("list").innerHTML = '<div class="loading">Loading your inbox…</div>';
   try{
-    const res = await fetch("/api/emails");
+    const res = await fetch("/api/emails?t=" + Date.now(), { cache: "no-store" });
     if(res.status === 401){ renderLogin(); return; }
     const data = await res.json();
     const localStates = getLocalStates();
@@ -331,6 +333,20 @@ async function initNotificationButton() {
     if (btn) btn.textContent = existing ? "🔔 On" : "🔔 Off";
   } catch (e) { console.error("Service worker registration failed:", e); }
 }
+
+async function sendTestNotification() {
+  const res = await fetch("/api/push/test", { method: "POST" });
+  if (res.status === 400) {
+    alert("Turn on the bell first (tap the 🔔 button), then try Test again.");
+    return;
+  }
+  if (!res.ok) {
+    alert("Something went wrong sending the test notification.");
+    return;
+  }
+  alert("Test sent! You should see a notification appear in a few seconds.");
+}
+window.sendTestNotification = sendTestNotification;
 
 checkLogin();
 </script>
